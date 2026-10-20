@@ -1,52 +1,36 @@
 # FINAL STATUS
 
-## Project status
-**Demo-ready locally; two account-gated steps remain** (public deployment, APK build). Legend: PASS = actually run · CODE = verified by reading code · MANUAL = needs a person/device · BLOCKED = needs credentials.
+Legend: PASS = actually run · CODE = verified by reading code · MANUAL = needs a person/device.
 
-## Architecture
-Next.js web + Expo Android app → NestJS REST API (`/api`) → Prisma → PostgreSQL. JWT bearer auth shared by both clients.
-
-## Completed features
-Auth (register/login/logout/me), project CRUD + search/filter, task CRUD + search/status/priority filters + mark complete, live dashboard, web registration screen (added), mobile SecureStore auth restore, 401 handling, pull-to-refresh, loading/empty/error states.
-
-## Changes made in this pass
-- Backend dependencies were only declared in a stray root `package.json`; moved into `backend/package.json` (+ `prisma generate` on install/build).
-- Activated rate limiting (global 120/min, auth 20/min); `JWT_SECRET` required at startup; configurable JWT expiry and CORS; enum-validated query params (invalid filter → 400 instead of 500); email normalisation; length limits; health endpoint `GET /api`; Nest logger instead of console emoji.
-- Web: added registration, removed pre-filled test credentials, fixed page title.
-- Mobile: fixed bad-password login showing "session expired"; time-based greeting; removed Expo starter screens/components/assets and debug logging; added Android package id, `eas.json` (APK preview profile), cleartext config for LAN demos; app renamed.
-- Added `.env.example` files, `render.yaml`, `scripts/api-smoke-test.mjs`, `scripts/seed-demo.mjs`, README, docs/API.md, docs/ER-DIAGRAM.md, DEMO.md.
-
-## Security
-bcrypt PASS · JWT expiry/malformed/wrong-signature → 401 PASS · ownership (A↔B read/update/delete project & task → 404) PASS · DTO validation PASS · rate limiting PASS (429 observed on login after 20/min) · Prisma parameterised queries CODE · password never returned PASS (register/login/me) · secrets only in git-ignored `.env` CODE.
+## Live deployment
+| Item | Value |
+|---|---|
+| Web app | https://projectflow-web-tau.vercel.app |
+| API | https://projectflow-api-virid.vercel.app/api (health: `GET /api`) |
+| Source | https://github.com/AdityaParthasarathy/project-management-system |
+| Database | Hosted PostgreSQL (Prisma Postgres); migrations applied with `prisma migrate deploy` |
+| Demo login | `demo@projectflow.test` / `DemoPass#2026` (3 projects, 6 tasks created through the API) |
 
 ## Test results
-- `node scripts/api-smoke-test.mjs` against the running backend: **40/40 PASS** (auth, validation, CRUD, filters, ownership, dashboard, cascade delete).
-- Web: registered a new user in the browser and reached the dashboard — PASS. Other web screens: CODE only (not click-tested in this pass).
-- Shared web/mobile data: same API/DB, API-level equivalence PASS; native Android device behaviour MANUAL.
-- Backend unit tests (`npm test`): **10/10 PASS**. API smoke test now 42/42 (adds per-project task filter).
-- `npx expo-doctor`: 20/20 PASS.
+- API smoke test (`npm run test:api`): **42/42 PASS** against the local server and the live server.
+- Unit tests (`npm test`): **10/10 PASS**.
+- Rate limit: 429 after 20 login attempts/min - PASS. Expired / wrong-signature / malformed JWT -> 401 - PASS.
+- CORS: allowed origin gets the header, other origins do not - PASS.
+- Live web app in a browser: login with the demo account, dashboard numbers, Tasks page project filter - PASS.
+- Mobile on a physical phone/emulator: MANUAL (not run). Docker image build: not run.
 
 ## Build results
-Backend `npm run build` PASS · Backend `tsc --noEmit` PASS · Frontend `npm run build` PASS · Mobile `npx tsc --noEmit` PASS · Mobile `npx expo export --platform web --output-dir .web-build` PASS · Android APK BLOCKED (EAS not logged in).
+Backend `npm run build` PASS · Frontend `npm run build` PASS · Mobile `npx tsc --noEmit` PASS · `npx expo export --platform web --output-dir .web-build` PASS · `expo-doctor` 20/20.
 
-## Deployment status
-Not deployed (needs Render/Vercel/Neon logins). Config ready: `render.yaml`, env docs in README. Mobile API URL currently the LAN dev URL `http://192.168.29.8:5000/api` (fallback in `mobile/src/services/api.ts`; override with `EXPO_PUBLIC_API_URL`).
+## Requirements coverage
+All functional, technical, security and API requirements of the assignment are implemented (see `README.md` and `docs/ProjectFlow_Complete_Guide.pdf`, section 13). Bonus items done: Docker, unit + API tests, CI workflow file (`docs/github-actions-ci.yml`). Not done: pagination, sorting, audit logs, RBAC, refresh tokens, push notifications, offline mode, shared types.
 
-## Android APK status
-Not built. Ready: `app.json` (package `com.projectmanagement.mobile`), `eas.json` preview=APK. Command: `cd mobile && npx eas-cli@latest login && npx eas-cli@latest build -p android --profile preview`.
-
-## Documentation status
-README, docs/API.md, docs/ER-DIAGRAM.md, DEMO.md, `.env.example` (backend, frontend, mobile), this file — done.
+## Android APK
+Config is complete (`mobile/app.json`, `mobile/eas.json` preview = APK, API URL baked in). Cloud build: `cd mobile && npx eas-cli@latest login && npx eas-cli@latest build -p android --profile preview`.
 
 ## Known limitations
-Stateless logout; single-file web UI; stray files at repo root and three nested `.git` folders (see below).
+Stateless logout (token discarded client-side, expires in 1 day) · in-memory rate limiter (per instance) · web UI is a single large component file · free hosted database may be a temporary instance unless claimed · first request after idle is slow (serverless cold start).
 
-## Human actions required
-1. Publish the repo (public) from this folder: `gh repo create project-management-system --public --source=. --push` (GitHub login already done).
-2. Render: New > Blueprint > pick the repo (uses `render.yaml`). Copy the API URL it gives you.
-3. Vercel: `cd frontend && vercel --prod` with `NEXT_PUBLIC_API_URL=https://<api-url>/api`. Then set `CORS_ORIGIN` on Render to the Vercel URL.
-4. Expo: `cd mobile && npx eas-cli@latest login`, then `EXPO_PUBLIC_API_URL=https://<api-url>/api npx eas-cli@latest build -p android --profile preview`.
-5. Install the APK on an Android phone, test, and record the 5-minute demo (see DEMO.md).
-
-## Demo instructions
-See DEMO.md.
+## Remaining human actions
+1. Submit the GitHub link, the two deployment URLs and the APK link.
+2. Record the 5-minute demo (`DEMO.md`).
