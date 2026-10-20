@@ -2,20 +2,24 @@
 
 Full-stack project & task manager: a **Next.js** web app and an **Expo / React Native** Android app sharing one **NestJS** REST API and one **PostgreSQL** database. Same account works on web and mobile.
 
+## Live deployment
+- Web app: https://projectflow-web-tau.vercel.app
+- API: https://projectflow-api-virid.vercel.app/api (health check: `GET /api`)
+- Demo login (seeded through the API): `demo@projectflow.test` / `DemoPass#2026`
+- Database: hosted PostgreSQL (Prisma Postgres). Both apps are hosted on Vercel; the API runs as a serverless function.
+
 ## Features
 - Register / login / logout, bcrypt-hashed passwords, JWT with expiry
 - Projects: CRUD, status (Not Started / In Progress / Completed), dates, search by name, filter by status
 - Tasks: CRUD, priority (Low/Medium/High), status (Pending/In Progress/Completed), due date, mark complete, search + status/priority filters
 - Dashboard with live DB counts (projects, tasks, completed, pending, projects in progress)
 - Mobile: SecureStore token storage, session restore, 401 → session-expired + redirect to login, pull-to-refresh, loading / empty / error states
-- Per-project task filter (web dropdown, mobile chips, `GET /api/tasks?projectId=`)
-- Request logging, Docker (`docker compose up --build`), GitHub Actions CI (workflow file in `docs/github-actions-ci.yml`; copy to `.github/workflows/ci.yml` to enable)
 - Per-user data isolation on every endpoint, DTO validation, rate limiting
 
 ## Tech stack
 | Layer | Tech |
 |---|---|
-| Backend | NestJS 12, Prisma 6, PostgreSQL, Passport-JWT, bcrypt, class-validator, @nestjs/throttler |
+| Backend | NestJS 12, Prisma 6, PostgreSQL, Passport-JWT, bcrypt, class-validator, custom in-memory rate-limit guard (ESM) |
 | Web | Next.js 16, React 19, Tailwind 4 |
 | Mobile | Expo 58, Expo Router, React Native 0.88, TypeScript, expo-secure-store |
 
@@ -112,19 +116,22 @@ cd mobile
 npx eas-cli@latest login
 npx eas-cli@latest build -p android --profile preview   # produces an installable .apk
 ```
-`eas.json` preview profile uses `buildType: apk`. `app.json` enables cleartext HTTP (via `expo-build-properties`) so the APK can reach a LAN `http://` backend for demos; set `EXPO_PUBLIC_API_URL` (e.g. `EXPO_PUBLIC_API_URL=https://… npx eas-cli build …`, or add it under `build.preview.env` in `eas.json`) to your backend URL first. For a public HTTPS backend you can set `usesCleartextTraffic` to `false`.
+`eas.json` preview profile uses `buildType: apk`. The `preview` profile already sets `EXPO_PUBLIC_API_URL` to the deployed HTTPS API. To test against a LAN backend instead, run Expo Go with `EXPO_PUBLIC_API_URL=http://<LAN-IP>:5000/api`.
 
 ## Deployment
-1. **API + DB**: connect the repo to Render and apply `render.yaml` (creates Postgres, runs `prisma migrate deploy`, generates `JWT_SECRET`). Or any Node host + managed Postgres: build `npm run build`, release `npx prisma migrate deploy`, start `node dist/main`.
-2. **Web**: import `frontend/` into Vercel with `NEXT_PUBLIC_API_URL=https://<api-host>/api`.
-3. **CORS**: set `CORS_ORIGIN` to the Vercel URL.
-4. **Mobile**: build the APK with `EXPO_PUBLIC_API_URL=https://<api-host>/api`.
+Both projects are deployed with the Vercel CLI (`vercel deploy --prod` from `backend/` and from `frontend/`).
+1. **Database**: any PostgreSQL. Run `DATABASE_URL=... npx prisma migrate deploy` once.
+2. **API** (`backend/`): Vercel env vars `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN` (the web URL). The backend is native ESM, `engines.node` is 22.x and `prisma generate` runs in the build. `render.yaml` is an alternative blueprint for Render.
+3. **Web** (`frontend/`): env var `NEXT_PUBLIC_API_URL=https://<api-host>/api`.
+4. **Mobile**: `EXPO_PUBLIC_API_URL` (already set for the `preview` EAS profile and used as the in-code default).
+
+The rate limiter keeps counters in memory per server instance (fine for this assessment; use Redis for multi-instance production).
 
 ## Demo flow
 See [DEMO.md](DEMO.md).
 
 ## Known limitations
 - Logout does not revoke tokens server-side (stateless JWT; tokens expire after 1 day).
-- Backend unit tests cover services (ownership, hashing, dashboard); end-to-end behaviour is covered by `npm run test:api`.
+- Backend Jest scaffold specs are not runnable under the current ESM/Jest config; verification is via `npm run test:api`.
 - Web UI is a single-page client component (`frontend/app/page.tsx`).
-- Not deployed publicly yet and APK not yet built (needs Render/Vercel/Expo account logins).
+- The free hosted database may be a temporary Prisma Postgres instance; claim it (link in FINAL_STATUS.md) or point `DATABASE_URL` at another PostgreSQL.

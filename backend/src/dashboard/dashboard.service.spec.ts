@@ -1,5 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { DashboardService } from './dashboard.service';
+import { DashboardService } from './dashboard.service.js';
 
 describe('DashboardService', () => {
   it('returns counts from the database scoped to the user', async () => {

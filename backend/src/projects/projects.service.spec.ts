@@ -1,6 +1,6 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { NotFoundException } from '@nestjs/common';
-import { ProjectsService } from './projects.service';
+import { ProjectsService } from './projects.service.js';
 
 function setup() {
   const prisma = {

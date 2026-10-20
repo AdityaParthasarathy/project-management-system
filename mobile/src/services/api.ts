@@ -1,6 +1,6 @@
 import { getToken, removeToken } from './authStorage';
 
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.29.8:5000/api';
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://projectflow-api-virid.vercel.app/api';
 
 export class ApiError extends Error {
   status?: number;

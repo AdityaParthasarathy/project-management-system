@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { requestLogger } from './common/request-logger.middleware';
+import { AppModule } from './app.module.js';
+import { requestLogger } from './common/request-logger.middleware.js';
 
 async function bootstrap() {
   if (!process.env.JWT_SECRET) {

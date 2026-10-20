@@ -13,10 +13,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ProjectStatus } from '@prisma/client';
-import { ProjectsService } from './projects.service';
-import { CreateProjectDto } from './dto/create-project.dto';
-import { UpdateProjectDto } from './dto/update-project.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ProjectsService } from './projects.service.js';
+import { CreateProjectDto } from './dto/create-project.dto.js';
+import { UpdateProjectDto } from './dto/update-project.dto.js';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard)

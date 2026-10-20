@@ -6,30 +6,28 @@ import {
   Request,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
-import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RateLimit } from '../common/rate-limit.js';
+import { AuthService } from './auth.service.js';
+import { RegisterDto } from './dto/register.dto.js';
+import { LoginDto } from './dto/login.dto.js';
+import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 
-const authThrottle = {
-  default: {
-    limit: Number(process.env.AUTH_RATE_LIMIT_PER_MINUTE) || 20,
-    ttl: 60_000,
-  },
+const authRateLimit = {
+  limit: Number(process.env.AUTH_RATE_LIMIT_PER_MINUTE) || 20,
+  ttlMs: 60_000,
 };
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Throttle(authThrottle)
+  @RateLimit(authRateLimit)
   @Post('register')
   register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
-  @Throttle(authThrottle)
+  @RateLimit(authRateLimit)
   @Post('login')
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);

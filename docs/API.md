@@ -37,7 +37,7 @@ Emails are trimmed and lower-cased. Passwords are bcrypt-hashed and never return
 ## Tasks (own tasks only)
 | Method & path | Body / query | Success | Errors |
 |---|---|---|---|
-| `GET /tasks` | query `search` (name), `status`, `priority`, `projectId` | `200 Task[]` | 400 bad enum, 401 |
+| `GET /tasks` | query `search` (name), `status`, `priority` | `200 Task[]` | 400 bad enum, 401 |
 | `GET /tasks/:id` | – | `200 Task` | 400, 401, 404 |
 | `POST /tasks` | `name`, `projectId` (req, must be your project), `description`, `priority`, `status`, `dueDate` | `201 Task` | 400, 401, 404 project not found |
 | `PUT /tasks/:id` | any subset of the create fields (mark complete: `{ "status": "COMPLETED" }`) | `200 Task` | 400, 401, 404 |

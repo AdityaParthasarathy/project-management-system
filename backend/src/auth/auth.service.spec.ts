@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { AuthService } from './auth.service';
+import { AuthService } from './auth.service.js';
 
 function setup() {
   const prisma = { user: { findUnique: jest.fn<(...a: any[]) => any>(), create: jest.fn<(...a: any[]) => any>() } };
