@@ -1,0 +1,13 @@
+﻿node_modules/
+dist/
+.next/
+.expo/
+.web-build/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.example
+*.jks
+*.pem
+.DS_Store

@@ -1,0 +1,24 @@
+# Render Blueprint: backend API + managed PostgreSQL. Deploy the frontend to Vercel (root dir: frontend).
+databases:
+  - name: projectflow-db
+    plan: free
+    databaseName: project_management
+services:
+  - type: web
+    name: projectflow-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install --include=dev && npm run build
+    preDeployCommand: npx prisma migrate deploy
+    startCommand: node dist/main
+    healthCheckPath: /api
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: projectflow-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: "*"   # tighten to your Vercel URL after the web app is deployed
