@@ -42,10 +42,11 @@ README, docs/API.md, docs/ER-DIAGRAM.md, DEMO.md, `.env.example` (backend, front
 Stateless logout; single-file web UI; stray files at repo root and three nested `.git` folders (see below).
 
 ## Human actions required
-1. `npx eas-cli@latest login` then run the APK build (Expo account).
-2. Deploy: Render blueprint (`render.yaml`) + Vercel for `frontend/` (account logins); then rebuild the APK with the HTTPS `EXPO_PUBLIC_API_URL`.
-3. Repo cleanup I was not permitted to do: delete the leftover root-level `package.json`, `package-lock.json`, `prisma7.config.ts`, `prisma/`, `node_modules/` (stray Prisma 7 install; backend no longer uses them). `backend/`, `frontend/`, `mobile/` each contain their own `.git`; remove them (or use submodules) before pushing a single monorepo to GitHub. Rotate the DB password/JWT secret if the root `.env` was ever shared.
-4. Physical Android test of the APK.
+1. Publish the repo (public) from this folder: `gh repo create project-management-system --public --source=. --push` (GitHub login already done).
+2. Render: New > Blueprint > pick the repo (uses `render.yaml`). Copy the API URL it gives you.
+3. Vercel: `cd frontend && vercel --prod` with `NEXT_PUBLIC_API_URL=https://<api-url>/api`. Then set `CORS_ORIGIN` on Render to the Vercel URL.
+4. Expo: `cd mobile && npx eas-cli@latest login`, then `EXPO_PUBLIC_API_URL=https://<api-url>/api npx eas-cli@latest build -p android --profile preview`.
+5. Install the APK on an Android phone, test, and record the 5-minute demo (see DEMO.md).
 
 ## Demo instructions
 See DEMO.md.
