@@ -9,7 +9,7 @@ Full-stack project & task manager: a **Next.js** web app and an **Expo / React N
 - Dashboard with live DB counts (projects, tasks, completed, pending, projects in progress)
 - Mobile: SecureStore token storage, session restore, 401 → session-expired + redirect to login, pull-to-refresh, loading / empty / error states
 - Per-project task filter (web dropdown, mobile chips, `GET /api/tasks?projectId=`)
-- Request logging, Docker (`docker compose up --build`), GitHub Actions CI
+- Request logging, Docker (`docker compose up --build`), GitHub Actions CI (workflow file in `docs/github-actions-ci.yml`; copy to `.github/workflows/ci.yml` to enable)
 - Per-user data isolation on every endpoint, DTO validation, rate limiting
 
 ## Tech stack
