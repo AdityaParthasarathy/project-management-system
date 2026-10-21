@@ -2,6 +2,8 @@ import { getToken, removeToken } from './authStorage';
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://projectflow-api-virid.vercel.app/api';
 
+const REQUEST_TIMEOUT_MS = 20000;
+
 export class ApiError extends Error {
   status?: number;
   isNetworkError?: boolean;
@@ -43,10 +45,19 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
       headers.set('Content-Type', 'application/json');
     }
 
-    const response = await fetch(buildUrl(path), {
-      ...options,
-      headers,
-    });
+    // Never hang forever on a dead connection: give up after 20s with a friendly message.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(buildUrl(path), {
+        ...options,
+        headers,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
 
     const data = await parseResponseBody(response);
 
@@ -70,7 +81,7 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
       throw error;
     }
 
-    if (error instanceof TypeError) {
+    if (error instanceof TypeError || (error as Error)?.name === 'AbortError') {
       throw new ApiError(
         'Unable to connect to the server. Please check your internet/Wi-Fi connection and try again.',
         undefined,
