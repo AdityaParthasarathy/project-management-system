@@ -27,26 +27,10 @@ function AppNavigator() {
     );
   }
 
-  if (user) {
-    return (
-      <>
-        <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: 'fade',
-            contentStyle: { backgroundColor: colors.background },
-          }}
-        >
-          <Stack.Screen name="index" />
-          <Stack.Screen name="projects" />
-          <Stack.Screen name="tasks" />
-          <Stack.Screen name="profile" />
-        </Stack>
-      </>
-    );
-  }
+  const isLoggedIn = !!user;
 
+  // Stack.Protected makes unauthenticated users land on the login screen
+  // instead of the (data-less) Home screen, and vice versa after login.
   return (
     <>
       <StatusBar style="light" />
@@ -57,8 +41,16 @@ function AppNavigator() {
           contentStyle: { backgroundColor: colors.background },
         }}
       >
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
+        <Stack.Protected guard={isLoggedIn}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="projects" />
+          <Stack.Screen name="tasks" />
+          <Stack.Screen name="profile" />
+        </Stack.Protected>
+        <Stack.Protected guard={!isLoggedIn}>
+          <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
+        </Stack.Protected>
       </Stack>
     </>
   );
