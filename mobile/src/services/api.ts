@@ -89,7 +89,8 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
       );
     }
 
-    throw new ApiError('Something went wrong. Please try again.');
+    const detail = error instanceof Error && error.message ? ` (${error.message})` : '';
+    throw new ApiError(`Something went wrong. Please try again.${detail}`);
   }
 }
 
