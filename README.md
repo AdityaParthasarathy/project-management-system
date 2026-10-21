@@ -5,6 +5,7 @@ Full-stack project & task manager: a **Next.js** web app and an **Expo / React N
 ## Live deployment
 - Web app: https://projectflow-web-tau.vercel.app
 - API: https://projectflow-api-virid.vercel.app/api (health check: `GET /api`)
+- Android APK (EAS build): https://expo.dev/accounts/adityapartha/projects/project-management-mobile/builds/53616351-9cf8-4dad-85cb-08d03d8d56a8
 - Demo login (seeded through the API): `demo@projectflow.test` / `DemoPass#2026`
 - Database: hosted PostgreSQL (Prisma Postgres). Both apps are hosted on Vercel; the API runs as a serverless function.
 

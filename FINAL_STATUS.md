@@ -9,6 +9,7 @@ Legend: PASS = actually run · CODE = verified by reading code · MANUAL = needs
 | API | https://projectflow-api-virid.vercel.app/api (health: `GET /api`) |
 | Source | https://github.com/AdityaParthasarathy/project-management-system |
 | Database | Hosted PostgreSQL (Prisma Postgres); migrations applied with `prisma migrate deploy` |
+| Android APK | https://expo.dev/accounts/adityapartha/projects/project-management-mobile/builds/53616351-9cf8-4dad-85cb-08d03d8d56a8 |
 | Demo login | `demo@projectflow.test` / `DemoPass#2026` (3 projects, 6 tasks created through the API) |
 
 ## Test results
@@ -26,7 +27,7 @@ Backend `npm run build` PASS · Frontend `npm run build` PASS · Mobile `npx tsc
 All functional, technical, security and API requirements of the assignment are implemented (see `README.md` and `docs/ProjectFlow_Complete_Guide.pdf`, section 13). Bonus items done: Docker, unit + API tests, CI workflow file (`docs/github-actions-ci.yml`). Not done: pagination, sorting, audit logs, RBAC, refresh tokens, push notifications, offline mode, shared types.
 
 ## Android APK
-Config is complete (`mobile/app.json`, `mobile/eas.json` preview = APK, API URL baked in). Cloud build: `cd mobile && npx eas-cli@latest login && npx eas-cli@latest build -p android --profile preview`.
+Built with EAS and installed/tested on an Android emulator (login + live dashboard): https://expo.dev/accounts/adityapartha/projects/project-management-mobile/builds/53616351-9cf8-4dad-85cb-08d03d8d56a8
 
 ## Known limitations
 Stateless logout (token discarded client-side, expires in 1 day) · in-memory rate limiter (per instance) · web UI is a single large component file · free hosted database may be a temporary instance unless claimed · first request after idle is slow (serverless cold start).
