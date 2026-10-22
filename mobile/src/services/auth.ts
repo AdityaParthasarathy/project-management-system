@@ -1,8 +1,11 @@
 import { apiRequest, authenticatedRequest } from './api';
+import { getRefreshToken } from './authStorage';
+import { withCache } from './cache';
 import { User } from '@/types';
 
 export interface AuthResponse {
   token: string;
+  refreshToken: string;
   user: User;
   message: string;
 }
@@ -26,11 +29,15 @@ export async function register(fullName: string, email: string, password: string
 }
 
 export async function logout() {
-  return authenticatedRequest<{ message: string }>('/auth/logout', {
+  // Tell the server to revoke the refresh token (real logout), then the caller clears local storage.
+  const refreshToken = await getRefreshToken();
+  return apiRequest<{ message: string }>('/auth/logout', {
     method: 'POST',
+    body: JSON.stringify({ refreshToken: refreshToken ?? undefined }),
   });
 }
 
 export async function getMe() {
-  return authenticatedRequest<User>('/auth/me');
+  // Cached so the app can still start (and stay signed in) while offline.
+  return withCache('me', () => authenticatedRequest<User>('/auth/me'));
 }

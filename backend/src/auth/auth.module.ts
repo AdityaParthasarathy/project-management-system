@@ -12,7 +12,7 @@ import { JwtStrategy } from './strategies/jwt.strategy.js';
       useFactory: () => ({
         secret: process.env.JWT_SECRET,
         signOptions: {
-          expiresIn: (process.env.JWT_EXPIRES_IN || '1d') as any,
+          expiresIn: (process.env.JWT_EXPIRES_IN || '1h') as any, // short-lived; clients renew it with the refresh token
         },
       }),
     }),

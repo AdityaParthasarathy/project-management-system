@@ -7,9 +7,19 @@ import { AuthModule } from './auth/auth.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { TasksModule } from './tasks/tasks.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
+import { AuditModule } from './audit/audit.module.js';
+import { AdminModule } from './admin/admin.module.js';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ProjectsModule, TasksModule, DashboardModule],
+  imports: [
+    PrismaModule,
+    AuditModule,
+    AuthModule,
+    ProjectsModule,
+    TasksModule,
+    DashboardModule,
+    AdminModule,
+  ],
   controllers: [AppController],
   // Global per-IP rate limit; auth endpoints apply a stricter limit (see AuthController).
   providers: [{ provide: APP_GUARD, useClass: RateLimitGuard }],

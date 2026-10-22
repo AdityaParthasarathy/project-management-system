@@ -19,7 +19,8 @@ import { useAuth } from '@/context/AuthContext';
 import { colors } from '@/constants/colors';
 import { ApiError } from '@/services/api';
 import { getProjects } from '@/services/projects';
-import { createTask, deleteTask, getTasks, updateTask } from '@/services/tasks';
+import { createTask, deleteTask, getTasksPage, updateTask } from '@/services/tasks';
+import { validateTask } from '@/shared/validation';
 import { Project, Task } from '@/types';
 
 function formatDate(value?: string | null) {
@@ -36,6 +37,13 @@ const taskStatusOptions = [
   { label: 'Completed', value: 'COMPLETED' },
 ] as const;
 
+const taskSortOptions = [
+  { label: 'Newest', value: 'createdAt:desc' },
+  { label: 'Due soon', value: 'dueDate:asc' },
+  { label: 'Priority', value: 'priority:desc' },
+  { label: 'A-Z', value: 'name:asc' },
+];
+
 const priorityOptions = [
   { label: 'All', value: 'ALL' },
   { label: 'Low', value: 'LOW' },
@@ -50,6 +58,9 @@ export default function TasksScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('createdAt:desc');
+  const [limit, setLimit] = useState(8);
+  const [total, setTotal] = useState(0);
   const [projectFilter, setProjectFilter] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'LOW' | 'MEDIUM' | 'HIGH'>('ALL');
@@ -82,13 +93,18 @@ export default function TasksScreen() {
 
     try {
       setError('');
-      const data = await getTasks({
+      const [sortBy, order] = sort.split(':');
+      const page = await getTasksPage({
         search: search.trim(),
         status: statusFilter === 'ALL' ? undefined : statusFilter,
         priority: priorityFilter === 'ALL' ? undefined : priorityFilter,
         projectId: projectFilter ?? undefined,
+        limit,
+        sortBy,
+        order: order as 'asc' | 'desc',
       });
-      setTasks(data);
+      setTasks(page.items);
+      setTotal(page.total);
     } catch (err: any) {
       if (err?.status === 401) {
         await logout();
@@ -99,7 +115,7 @@ export default function TasksScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [logout, priorityFilter, projectFilter, search, statusFilter]);
+  }, [logout, priorityFilter, projectFilter, search, statusFilter, sort, limit]);
 
   useFocusEffect(
     useCallback(() => {
@@ -147,13 +163,9 @@ export default function TasksScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) {
-      Alert.alert('Validation required', 'Task name is required.');
-      return;
-    }
-
-    if (!form.projectId) {
-      Alert.alert('Validation required', 'Please select a project.');
+    const check = validateTask({ name: form.name, projectId: form.projectId, dueDate: form.dueDate });
+    if (!check.ok) {
+      Alert.alert('Validation required', check.message);
       return;
     }
 
@@ -240,6 +252,12 @@ export default function TasksScreen() {
       ) : null}
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContent} style={styles.filtersRow}>
+        {taskSortOptions.map((option) => (
+          <FilterChip key={option.value} label={option.label} active={sort === option.value} onPress={() => setSort(option.value)} />
+        ))}
+      </ScrollView>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContent} style={styles.filtersRow}>
         {taskStatusOptions.map((option) => (
           <FilterChip key={option.value} label={option.label} active={statusFilter === option.value} onPress={() => setStatusFilter(option.value)} />
         ))}
@@ -262,6 +280,17 @@ export default function TasksScreen() {
           data={displayTasks}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.listContent}
+          ListFooterComponent={
+            tasks.length < total ? (
+              <View style={{ paddingVertical: 12 }}>
+                <Button title={`Load more (${tasks.length} of ${total})`} variant="secondary" onPress={() => setLimit((l) => l + 8)} />
+              </View>
+            ) : (
+              <Text style={{ color: colors.muted, textAlign: 'center', paddingVertical: 12 }}>
+                {total} {total === 1 ? 'task' : 'tasks'}
+              </Text>
+            )
+          }
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadTasks(); }} tintColor={colors.primaryLight} />}
           renderItem={({ item }) => (
             <Card style={styles.taskCard}>
@@ -387,6 +416,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   filtersRow: {
+    flexGrow: 0,
+    flexShrink: 0,
     paddingHorizontal: 18,
     marginBottom: 8,
   },

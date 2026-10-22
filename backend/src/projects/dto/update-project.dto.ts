@@ -1,16 +1,12 @@
 import {
   IsDateString,
-  IsEnum,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
 } from 'class-validator';
-
-enum ProjectStatus {
-  NOT_STARTED = 'NOT_STARTED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-}
+import { PROJECT_STATUSES } from '../../shared/types.js';
+import type { ProjectStatus } from '../../shared/types.js';
 
 export class UpdateProjectDto {
   @IsString()
@@ -22,7 +18,7 @@ export class UpdateProjectDto {
   @IsOptional()
   description?: string;
 
-  @IsEnum(ProjectStatus)
+  @IsIn(PROJECT_STATUSES)
   @IsOptional()
   status?: ProjectStatus;
 

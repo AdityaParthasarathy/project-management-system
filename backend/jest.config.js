@@ -5,7 +5,7 @@ export default {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: 'src',
   testRegex: '.*\.spec\.ts$',
-  moduleNameMapper: { '^(\.{1,2}/.*)\.js$': '$1' },
+  resolver: '<rootDir>/../jest-resolver.cjs',
   transform: {
     '^.+\.ts$': [
       'ts-jest',

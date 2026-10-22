@@ -18,7 +18,8 @@
     "postinstall": "prisma generate",
     "prisma:deploy": "prisma migrate deploy",
     "test:api": "node scripts/api-smoke-test.mjs",
-    "seed:demo": "node scripts/seed-demo.mjs"
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "make-admin": "node scripts/make-admin.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",

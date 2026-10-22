@@ -1,42 +1,79 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
+import type { AuditLogEntry, DashboardStats as DashboardData, Project, Task, User } from './shared/types';
+import { validateProject, validateRegister, validateTask } from './shared/validation';
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-type User = {
-  id: number;
-  fullName: string;
-  email: string;
-};
+const PAGE_SIZE = 6;
 
-type DashboardData = {
-  totalProjects: number;
-  totalTasks: number;
-  completedTasks: number;
-  pendingTasks: number;
-  projectsInProgress: number;
-};
+// Renews the short-lived access token using the long-lived refresh token (rotated by the server).
+let refreshInFlight: Promise<boolean> | null = null;
+async function refreshAccessToken(): Promise<boolean> {
+  const refreshToken = localStorage.getItem('refreshToken');
+  if (!refreshToken) return false;
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch(`${API_URL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        setTimeout(() => {
+          refreshInFlight = null;
+        }, 0);
+      }
+    })();
+  }
+  return refreshInFlight;
+}
 
-type Project = {
-  id: number;
-  name: string;
-  description: string | null;
-  status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
-  startDate: string | null;
-  endDate: string | null;
-};
+// fetch() for authenticated calls: attaches the token and retries once after a silent refresh on 401.
+async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const withAuth = (): RequestInit => ({
+    ...init,
+    headers: {
+      ...(init.headers as Record<string, string> | undefined),
+      Authorization: `Bearer ${localStorage.getItem('token')}`,
+    },
+  });
+  let res = await fetch(input, withAuth());
+  if (res.status === 401 && (await refreshAccessToken())) {
+    res = await fetch(input, withAuth());
+  }
+  return res;
+}
 
-type Task = {
-  id: number;
-  name: string;
-  description: string | null;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH';
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
-  dueDate: string | null;
-  projectId: number;
-};
+const PROJECT_SORTS = [
+  ['createdAt:desc', 'Newest first'],
+  ['createdAt:asc', 'Oldest first'],
+  ['name:asc', 'Name A-Z'],
+  ['name:desc', 'Name Z-A'],
+  ['status:asc', 'Status'],
+  ['startDate:asc', 'Start date'],
+];
+
+const TASK_SORTS = [
+  ['createdAt:desc', 'Newest first'],
+  ['createdAt:asc', 'Oldest first'],
+  ['name:asc', 'Name A-Z'],
+  ['name:desc', 'Name Z-A'],
+  ['priority:desc', 'Priority: high to low'],
+  ['priority:asc', 'Priority: low to high'],
+  ['dueDate:asc', 'Due date: soonest'],
+  ['dueDate:desc', 'Due date: latest'],
+];
 
 type ProjectForm = {
   name: string;
@@ -87,7 +124,14 @@ export default function Home() {
   const [dashboard, setDashboard] =
     useState<DashboardData | null>(null);
 
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]); // current page on the Projects screen
+  const [allProjects, setAllProjects] = useState<Project[]>([]); // full list for dropdowns / names
+  const [projectSort, setProjectSort] = useState('createdAt:desc');
+  const [projectPage, setProjectPage] = useState(1);
+  const [projectTotal, setProjectTotal] = useState(0);
+  const [taskSort, setTaskSort] = useState('createdAt:desc');
+  const [taskPage, setTaskPage] = useState(1);
+  const [taskTotal, setTaskTotal] = useState(0);
   const [tasks, setTasks] = useState<Task[]>([]);
 
   const [activePage, setActivePage] = useState('Dashboard');
@@ -135,22 +179,39 @@ export default function Home() {
 
   // Re-fetch whenever a filter dropdown changes (avoids stale-state lag).
   useEffect(() => {
+    setTaskPage(1);
+  }, [taskStatus, taskPriority, taskProject, taskSort]);
+
+  useEffect(() => {
     if (token) loadTasks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskStatus, taskPriority, taskProject]);
+  }, [taskStatus, taskPriority, taskProject, taskSort, taskPage]);
+
+  useEffect(() => {
+    setProjectPage(1);
+  }, [projectStatus, projectSort]);
 
   useEffect(() => {
     if (token) loadProjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectStatus]);
+  }, [projectStatus, projectSort, projectPage]);
 
   // ---------------- AUTH ----------------
 
   async function submitAuth(event: FormEvent) {
     event.preventDefault();
 
-    setLoading(true);
     setError('');
+
+    if (authMode === 'register') {
+      const check = validateRegister({ fullName, email, password });
+      if (!check.ok) {
+        setError(check.message);
+        return;
+      }
+    }
+
+    setLoading(true);
 
     try {
       const response = await fetch(`${API_URL}/auth/${authMode}`, {
@@ -178,6 +239,7 @@ export default function Home() {
       }
 
       localStorage.setItem('token', data.token);
+      localStorage.setItem('refreshToken', data.refreshToken ?? '');
       setPassword('');
 
       setToken(data.token);
@@ -207,10 +269,10 @@ export default function Home() {
         projectsResponse,
         tasksResponse,
       ] = await Promise.all([
-        fetch(`${API_URL}/auth/me`, { headers }),
-        fetch(`${API_URL}/dashboard`, { headers }),
-        fetch(`${API_URL}/projects`, { headers }),
-        fetch(`${API_URL}/tasks`, { headers }),
+        apiFetch(`${API_URL}/auth/me`),
+        apiFetch(`${API_URL}/dashboard`, { headers }),
+        apiFetch(`${API_URL}/projects`, { headers }),
+        apiFetch(`${API_URL}/tasks?page=1&limit=${PAGE_SIZE}`, { headers }),
       ]);
 
       if (
@@ -230,8 +292,11 @@ export default function Home() {
 
       setUser(meData);
       setDashboard(dashboardData);
-      setProjects(projectsData);
+      setAllProjects(projectsData);
+      setProjects(projectsData.slice(0, PAGE_SIZE));
+      setProjectTotal(projectsData.length);
       setTasks(tasksData);
+      setTaskTotal(Number(tasksResponse.headers.get('X-Total-Count') ?? tasksData.length));
     } catch {
       setError(
         'Unable to connect to the backend. Make sure NestJS is running.',
@@ -243,8 +308,7 @@ export default function Home() {
     if (!token) return;
 
     try {
-      const response = await fetch(
-        `${API_URL}/dashboard`,
+      const response = await apiFetch(`${API_URL}/dashboard`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -265,11 +329,17 @@ export default function Home() {
   }
 
   function logout() {
-    if (token) {
-      // Stateless JWT: server call is informational; the token is discarded client-side.
-      fetch(`${API_URL}/auth/logout`, { method: 'POST' }).catch(() => {});
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (refreshToken) {
+      // Revokes the refresh token on the server (real logout); failures are ignored.
+      fetch(`${API_URL}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      }).catch(() => {});
     }
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
 
     setToken(null);
     setUser(null);
@@ -296,10 +366,15 @@ export default function Home() {
         params.append('status', projectStatus);
       }
 
+      const [pSortBy, pOrder] = projectSort.split(':');
+      params.append('sortBy', pSortBy);
+      params.append('order', pOrder);
+      params.append('page', String(projectPage));
+      params.append('limit', String(PAGE_SIZE));
+
       const query = params.toString();
 
-      const response = await fetch(
-        `${API_URL}/projects${query ? `?${query}` : ''}`,
+      const response = await apiFetch(`${API_URL}/projects${query ? `?${query}` : ''}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -318,12 +393,22 @@ export default function Home() {
 
       const data = await response.json();
       setProjects(data);
+      setProjectTotal(Number(response.headers.get('X-Total-Count') ?? data.length));
     } catch (error) {
       setError(
         error instanceof Error
           ? error.message
           : 'Failed to load projects',
       );
+    }
+  }
+
+  async function refreshAllProjects() {
+    try {
+      const response = await apiFetch(`${API_URL}/projects`);
+      if (response.ok) setAllProjects(await response.json());
+    } catch {
+      // keep the previous list
     }
   }
 
@@ -356,6 +441,16 @@ export default function Home() {
   async function saveProject(event: FormEvent) {
     event.preventDefault();
 
+    const projectCheck = validateProject({
+      name: projectForm.name,
+      startDate: projectForm.startDate,
+      endDate: projectForm.endDate,
+    });
+    if (!projectCheck.ok) {
+      setError(projectCheck.message);
+      return;
+    }
+
     if (!token) return;
 
     setProjectLoading(true);
@@ -368,7 +463,7 @@ export default function Home() {
 
       const method = editingProject ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -403,6 +498,7 @@ export default function Home() {
       setProjectForm(emptyProjectForm);
 
       await loadProjects();
+      await refreshAllProjects();
       await loadDashboard();
     } catch (error) {
       setError(
@@ -425,8 +521,7 @@ export default function Home() {
     if (!confirmed) return;
 
     try {
-      const response = await fetch(
-        `${API_URL}/projects/${projectId}`,
+      const response = await apiFetch(`${API_URL}/projects/${projectId}`,
         {
           method: 'DELETE',
           headers: {
@@ -449,6 +544,7 @@ export default function Home() {
       }
 
       await loadProjects();
+      await refreshAllProjects();
       await loadUserData(token);
     } catch (error) {
       setError(
@@ -485,10 +581,15 @@ export default function Home() {
         params.append('projectId', taskProject);
       }
 
+      const [tSortBy, tOrder] = taskSort.split(':');
+      params.append('sortBy', tSortBy);
+      params.append('order', tOrder);
+      params.append('page', String(taskPage));
+      params.append('limit', String(PAGE_SIZE));
+
       const query = params.toString();
 
-      const response = await fetch(
-        `${API_URL}/tasks${query ? `?${query}` : ''}`,
+      const response = await apiFetch(`${API_URL}/tasks${query ? `?${query}` : ''}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -522,8 +623,8 @@ export default function Home() {
     setTaskForm({
       ...emptyTaskForm,
       projectId:
-        projects.length > 0
-          ? String(projects[0].id)
+        allProjects.length > 0
+          ? String(allProjects[0].id)
           : '',
     });
 
@@ -552,6 +653,16 @@ export default function Home() {
   async function saveTask(event: FormEvent) {
     event.preventDefault();
 
+    const taskCheck = validateTask({
+      name: taskForm.name,
+      projectId: taskForm.projectId,
+      dueDate: taskForm.dueDate,
+    });
+    if (!taskCheck.ok) {
+      setError(taskCheck.message);
+      return;
+    }
+
     if (!token) return;
 
     if (!taskForm.projectId) {
@@ -569,7 +680,7 @@ export default function Home() {
 
       const method = editingTask ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -628,8 +739,7 @@ export default function Home() {
     if (!confirmed) return;
 
     try {
-      const response = await fetch(
-        `${API_URL}/tasks/${taskId}`,
+      const response = await apiFetch(`${API_URL}/tasks/${taskId}`,
         {
           method: 'DELETE',
           headers: {
@@ -666,8 +776,7 @@ export default function Home() {
     if (!token) return;
 
     try {
-      const response = await fetch(
-        `${API_URL}/tasks/${task.id}`,
+      const response = await apiFetch(`${API_URL}/tasks/${task.id}`,
         {
           method: 'PUT',
           headers: {
@@ -848,7 +957,7 @@ export default function Home() {
           </div>
 
           <nav className="space-y-2">
-            {['Dashboard', 'Projects', 'Tasks'].map(
+            {['Dashboard', 'Projects', 'Tasks', 'Activity', ...(user?.role === 'ADMIN' ? ['Admin'] : [])].map(
               (item) => (
                 <button
                   key={item}
@@ -901,7 +1010,7 @@ export default function Home() {
               <Dashboard
                 user={user}
                 dashboard={dashboard}
-                projects={projects}
+                projects={allProjects}
                 setActivePage={setActivePage}
               />
             )}
@@ -909,6 +1018,11 @@ export default function Home() {
             {activePage === 'Projects' && (
               <ProjectsPage
                 projects={projects}
+                projectSort={projectSort}
+                setProjectSort={setProjectSort}
+                projectPage={projectPage}
+                setProjectPage={setProjectPage}
+                projectTotal={projectTotal}
                 projectSearch={projectSearch}
                 setProjectSearch={setProjectSearch}
                 projectStatus={projectStatus}
@@ -920,10 +1034,14 @@ export default function Home() {
               />
             )}
 
+            {activePage === 'Activity' && <ActivityPage />}
+
+            {activePage === 'Admin' && user?.role === 'ADMIN' && <AdminPage />}
+
             {activePage === 'Tasks' && (
               <TasksPage
                 tasks={tasks}
-                projects={projects}
+                projects={allProjects}
                 taskSearch={taskSearch}
                 setTaskSearch={setTaskSearch}
                 taskStatus={taskStatus}
@@ -932,6 +1050,11 @@ export default function Home() {
                 setTaskPriority={setTaskPriority}
                 taskProject={taskProject}
                 setTaskProject={setTaskProject}
+                taskSort={taskSort}
+                setTaskSort={setTaskSort}
+                taskPage={taskPage}
+                setTaskPage={setTaskPage}
+                taskTotal={taskTotal}
                 openCreateTask={openCreateTask}
                 openEditTask={openEditTask}
                 deleteTask={deleteTask}
@@ -1210,7 +1333,7 @@ export default function Home() {
                     Select a project
                   </option>
 
-                  {projects.map((project) => (
+                  {allProjects.map((project) => (
                     <option
                       key={project.id}
                       value={project.id}
@@ -1427,6 +1550,11 @@ function Dashboard({
 
 function ProjectsPage({
   projects,
+  projectSort,
+  setProjectSort,
+  projectPage,
+  setProjectPage,
+  projectTotal,
   projectSearch,
   setProjectSearch,
   projectStatus,
@@ -1437,6 +1565,11 @@ function ProjectsPage({
   loadProjects,
 }: {
   projects: Project[];
+  projectSort: string;
+  setProjectSort: (value: string) => void;
+  projectPage: number;
+  setProjectPage: (value: number) => void;
+  projectTotal: number;
   projectSearch: string;
   setProjectSearch: (value: string) => void;
   projectStatus: string;
@@ -1508,8 +1641,13 @@ function ProjectsPage({
           </option>
         </select>
 
+        <SortSelect value={projectSort} onChange={setProjectSort} options={PROJECT_SORTS} />
+
         <button
-          onClick={loadProjects}
+          onClick={() => {
+            setProjectPage(1);
+            loadProjects();
+          }}
           className="rounded-xl border border-zinc-700 px-5 py-3 text-sm text-zinc-300 hover:bg-zinc-900"
         >
           Search
@@ -1585,6 +1723,8 @@ function ProjectsPage({
           ))
         )}
       </div>
+
+      <Pager page={projectPage} total={projectTotal} onChange={setProjectPage} />
     </>
   );
 }
@@ -1604,6 +1744,11 @@ function TasksPage({
   setTaskPriority,
   taskProject,
   setTaskProject,
+  taskSort,
+  setTaskSort,
+  taskPage,
+  setTaskPage,
+  taskTotal,
   openCreateTask,
   openEditTask,
   deleteTask,
@@ -1620,6 +1765,11 @@ function TasksPage({
   setTaskPriority: (value: string) => void;
   taskProject: string;
   setTaskProject: (value: string) => void;
+  taskSort: string;
+  setTaskSort: (value: string) => void;
+  taskPage: number;
+  setTaskPage: (value: number) => void;
+  taskTotal: number;
   openCreateTask: () => void;
   openEditTask: (task: Task) => void;
   deleteTask: (id: number) => void;
@@ -1655,7 +1805,7 @@ function TasksPage({
         </button>
       </div>
 
-      <div className="mb-6 grid gap-3 md:grid-cols-[1fr_auto_auto_auto_auto]">
+      <div className="mb-6 grid gap-3 md:grid-cols-[1fr_auto_auto_auto_auto_auto]">
         <input
           value={taskSearch}
           onChange={(event) =>
@@ -1727,8 +1877,13 @@ function TasksPage({
           <option value="HIGH">High</option>
         </select>
 
+        <SortSelect value={taskSort} onChange={setTaskSort} options={TASK_SORTS} />
+
         <button
-          onClick={loadTasks}
+          onClick={() => {
+            setTaskPage(1);
+            loadTasks();
+          }}
           className="rounded-xl border border-zinc-700 px-5 py-3 text-sm text-zinc-300 hover:bg-zinc-900"
         >
           Search
@@ -1821,6 +1976,8 @@ function TasksPage({
           ))
         )}
       </div>
+
+      <Pager page={taskPage} total={taskTotal} onChange={setTaskPage} />
     </>
   );
 }
@@ -1892,4 +2049,221 @@ function EmptyState({
 
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString();
+}
+
+// ============================================================
+// SORT / PAGINATION / ACTIVITY / ADMIN
+// ============================================================
+
+function SortSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[][];
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label="Sort by"
+      className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-300 outline-none"
+    >
+      {options.map(([optionValue, label]) => (
+        <option key={optionValue} value={optionValue}>
+          {label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function Pager({
+  page,
+  total,
+  onChange,
+  pageSize = PAGE_SIZE,
+}: {
+  page: number;
+  total: number;
+  onChange: (page: number) => void;
+  pageSize?: number;
+}) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+
+  if (total <= pageSize) {
+    return (
+      <p className="mt-4 text-xs text-zinc-600">
+        {total} {total === 1 ? 'item' : 'items'}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-6 flex items-center justify-between text-sm text-zinc-400">
+      <span>
+        Page {page} of {pages} · {total} items
+      </span>
+
+      <div className="flex gap-2">
+        <button
+          disabled={page <= 1}
+          onClick={() => onChange(page - 1)}
+          className="rounded-lg border border-zinc-700 px-4 py-2 hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Previous
+        </button>
+
+        <button
+          disabled={page >= pages}
+          onClick={() => onChange(page + 1)}
+          className="rounded-lg border border-zinc-700 px-4 py-2 hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const ACTIVITY_PAGE_SIZE = 10;
+
+function ActivityPage() {
+  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      try {
+        const response = await apiFetch(
+          `${API_URL}/audit-logs?page=${page}&limit=${ACTIVITY_PAGE_SIZE}`,
+        );
+        if (!response.ok) throw new Error('failed');
+        const data = await response.json();
+        if (cancelled) return;
+        setEntries(data);
+        setTotal(Number(response.headers.get('X-Total-Count') ?? data.length));
+        setFailed(false);
+      } catch {
+        if (!cancelled) setFailed(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [page]);
+
+  return (
+    <>
+      <div className="mb-8">
+        <p className="text-sm text-zinc-500">Audit log</p>
+        <h3 className="mt-1 text-3xl font-bold">Activity</h3>
+        <p className="mt-2 text-sm text-zinc-500">
+          A record of what happened on your account: sign-ins and every create, update, complete and delete.
+        </p>
+      </div>
+
+      {loading && <p className="text-sm text-zinc-500">Loading activity...</p>}
+      {failed && <EmptyState message="Could not load activity." />}
+      {!loading && !failed && entries.length === 0 && <EmptyState message="No activity yet." />}
+
+      <div className="space-y-2">
+        {entries.map((entry) => (
+          <div
+            key={entry.id}
+            className="flex flex-col gap-1 rounded-xl border border-zinc-800 bg-zinc-900/40 px-5 py-3 md:flex-row md:items-center md:justify-between"
+          >
+            <div>
+              <span className="mr-3 rounded-md bg-zinc-800 px-2 py-1 text-xs font-semibold text-zinc-300">
+                {entry.action}
+              </span>
+              <span className="text-sm">
+                {entry.entity}
+                {entry.details ? `: ${entry.details}` : ''}
+              </span>
+            </div>
+            <span className="text-xs text-zinc-500">
+              {new Date(entry.createdAt).toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <Pager page={page} total={total} onChange={setPage} pageSize={ACTIVITY_PAGE_SIZE} />
+    </>
+  );
+}
+
+type AdminUser = {
+  id: number;
+  fullName: string;
+  email: string;
+  role: string;
+  createdAt: string;
+  _count: { projects: number; tasks: number };
+};
+
+function AdminPage() {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [message, setMessage] = useState('Loading users...');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await apiFetch(`${API_URL}/admin/users`);
+        if (!response.ok) throw new Error('failed');
+        setUsers(await response.json());
+        setMessage('');
+      } catch {
+        setMessage('Could not load users.');
+      }
+    })();
+  }, []);
+
+  return (
+    <>
+      <div className="mb-8">
+        <p className="text-sm text-zinc-500">Administrator only</p>
+        <h3 className="mt-1 text-3xl font-bold">Users</h3>
+      </div>
+
+      {message && <p className="text-sm text-zinc-500">{message}</p>}
+
+      <div className="overflow-x-auto rounded-xl border border-zinc-800">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-zinc-900 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3">Name</th>
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Projects</th>
+              <th className="px-4 py-3">Tasks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id} className="border-t border-zinc-800">
+                <td className="px-4 py-3">{u.fullName}</td>
+                <td className="px-4 py-3 text-zinc-400">{u.email}</td>
+                <td className="px-4 py-3">{u.role}</td>
+                <td className="px-4 py-3">{u._count.projects}</td>
+                <td className="px-4 py-3">{u._count.tasks}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
 }

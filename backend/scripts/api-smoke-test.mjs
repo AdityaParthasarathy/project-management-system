@@ -20,7 +20,7 @@ async function call(method, path, { token, body } = {}) {
   } catch {
     data = text;
   }
-  return { status: res.status, data };
+  return { status: res.status, data, headers: res.headers };
 }
 function check(name, cond, extra = '') {
   results.push(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : '  ' + extra}`);
@@ -36,6 +36,9 @@ let r = await call('POST', '/auth/register', { body: { fullName: 'Smoke A', emai
 check('register A -> 201', r.status === 201, r.status);
 check('register response has token, no password', !!r.data?.token && !JSON.stringify(r.data).includes('password'));
 const a = r.data?.token;
+const refreshA = r.data?.refreshToken;
+check('register returns refresh token', typeof refreshA === 'string' && refreshA.length > 40);
+check('new user has role USER', r.data?.user?.role === 'USER', JSON.stringify(r.data?.user));
 r = await call('POST', '/auth/register', { body: { fullName: 'Smoke B', email: emailB, password: pw } });
 const b = r.data?.token;
 r = await call('POST', '/auth/register', { body: { fullName: 'Dup', email: emailA, password: pw } });
@@ -126,6 +129,60 @@ r = await call('GET', '/projects', { token: b });
 check('B list projects empty', r.status === 200 && r.data.length === 0);
 r = await call('GET', '/dashboard', { token: b });
 check('B dashboard zeroes', r.data?.totalProjects === 0 && r.data?.totalTasks === 0);
+
+// ---- pagination + sorting ----
+for (const [n, p] of [['Zeta', 'LOW'], ['Alpha', 'HIGH'], ['Mid', 'MEDIUM']]) {
+  await call('POST', '/tasks', { token: a, body: { name: `Page ${n}`, projectId: pid, priority: p } });
+}
+r = await call('GET', '/tasks?page=1&limit=2&sortBy=name&order=asc', { token: a });
+check('pagination limit=2 returns 2 items', r.status === 200 && r.data.length === 2, JSON.stringify(r.data?.length));
+check('X-Total-Count header = all matches (5)', r.headers.get('x-total-count') === '5', r.headers.get('x-total-count'));
+check('sorted by name asc', r.data[0].name <= r.data[1].name, `${r.data[0].name} / ${r.data[1].name}`);
+r = await call('GET', '/tasks?page=3&limit=2&sortBy=name&order=asc', { token: a });
+check('last page has the remaining 1 item', r.status === 200 && r.data.length === 1, r.data?.length);
+r = await call('GET', '/tasks?sortBy=priority&order=desc', { token: a });
+check('sort by priority desc starts with HIGH', r.status === 200 && r.data[0].priority === 'HIGH', r.data?.[0]?.priority);
+r = await call('GET', '/tasks?sortBy=password', { token: a });
+check('invalid sortBy -> 400', r.status === 400, r.status);
+r = await call('GET', '/tasks?page=0', { token: a });
+check('page=0 -> 400', r.status === 400, r.status);
+r = await call('GET', '/projects?page=1&limit=10&sortBy=name', { token: a });
+check('projects paginate too', r.status === 200 && r.headers.get('x-total-count') === '1', r.headers.get('x-total-count'));
+
+// ---- audit log ----
+r = await call('GET', '/audit-logs?limit=50', { token: a });
+const actions = (r.data || []).map((e) => `${e.action}:${e.entity}`);
+check('audit log has CREATE Project', actions.includes('CREATE:Project'), actions.join(','));
+check('audit log has CREATE Task + COMPLETE Task', actions.includes('CREATE:Task') && actions.includes('COMPLETE:Task'));
+check('audit log has REGISTER', actions.includes('REGISTER:Auth'));
+r = await call('GET', '/audit-logs', { token: b });
+check("user B cannot see user A's audit entries", r.status === 200 && !(r.data || []).some((e) => e.entity === 'Project' && e.details === 'Alpha Renamed'));
+r = await call('GET', '/audit-logs?scope=all', { token: b });
+check('scope=all ignored for non-admin (still only own entries)', r.status === 200 && (r.data || []).every((e) => e.userId === r.data[0]?.userId));
+
+// ---- roles ----
+r = await call('GET', '/admin/users', { token: a });
+check('normal user on admin route -> 403', r.status === 403, r.status);
+r = await call('GET', '/admin/users');
+check('admin route without token -> 401', r.status === 401, r.status);
+
+// ---- refresh tokens ----
+r = await call('POST', '/auth/refresh', { body: { refreshToken: refreshA } });
+check('refresh -> new access + refresh token', r.status === 201 && !!r.data?.token && !!r.data?.refreshToken && r.data.refreshToken !== refreshA, r.status);
+const newAccess = r.data?.token;
+const refreshA2 = r.data?.refreshToken;
+r = await call('GET', '/auth/me', { token: newAccess });
+check('new access token works', r.status === 200);
+r = await call('POST', '/auth/refresh', { body: { refreshToken: refreshA } });
+check('old refresh token cannot be reused (rotation) -> 401', r.status === 401, r.status);
+r = await call('POST', '/auth/refresh', { body: { refreshToken: 'garbage' } });
+check('garbage refresh token -> 401', r.status === 401, r.status);
+r = await call('POST', '/auth/refresh', { body: {} });
+check('missing refresh token -> 401', r.status === 401, r.status);
+r = await call('POST', '/auth/logout', { body: { refreshToken: refreshA2 } });
+check('logout with refresh token -> 2xx', r.status < 300, r.status);
+r = await call('POST', '/auth/refresh', { body: { refreshToken: refreshA2 } });
+check('refresh token is dead after logout (server-side logout) -> 401', r.status === 401, r.status);
 
 r = await call('DELETE', `/tasks/${tid}`, { token: a });
 check('delete task -> 200', r.status === 200, r.status);

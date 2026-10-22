@@ -8,15 +8,16 @@ import {
   Post,
   Put,
   Query,
-  ParseEnumPipe,
   Request,
+  Res,
   UseGuards,
 } from '@nestjs/common';
-import { TaskPriority, TaskStatus } from '@prisma/client';
+import type { Response } from 'express';
 import { TasksService } from './tasks.service.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { UpdateTaskDto } from './dto/update-task.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { TaskListQueryDto } from '../common/list-query.dto.js';
 
 @Controller('tasks')
 @UseGuards(JwtAuthGuard)
@@ -34,21 +35,17 @@ export class TasksController {
     );
   }
 
+  // Query: search, status, priority, projectId, page, limit, sortBy, order.
+  // Total matches come back in the X-Total-Count header.
   @Get()
-  findAll(
+  async findAll(
     @Request() request: any,
-    @Query('search') search?: string,
-    @Query('projectId', new ParseIntPipe({ optional: true })) projectId?: number,
-    @Query('status', new ParseEnumPipe(TaskStatus, { optional: true })) status?: TaskStatus,
-    @Query('priority', new ParseEnumPipe(TaskPriority, { optional: true })) priority?: TaskPriority,
+    @Query() query: TaskListQueryDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.tasksService.findAll(
-      request.user.userId,
-      search,
-      status,
-      priority,
-      projectId,
-    );
+    const { items, total } = await this.tasksService.findAll(request.user.userId, query);
+    res.setHeader('X-Total-Count', String(total));
+    return items;
   }
 
   @Get(':id')

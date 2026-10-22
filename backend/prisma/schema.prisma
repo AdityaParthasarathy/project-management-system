@@ -8,6 +8,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 enum ProjectStatus {
   NOT_STARTED
   IN_PROGRESS
@@ -27,14 +32,46 @@ enum TaskStatus {
 }
 
 model User {
-  id        Int       @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   fullName  String
-  email     String    @unique
+  email     String   @unique
   password  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+
+  projects      Project[]
+  tasks         Task[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+}
+
+// Long-lived login credential. Only a SHA-256 hash is stored; revoked on logout / rotation.
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
   createdAt DateTime  @default(now())
 
-  projects  Project[]
-  tasks     Task[]
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Who did what, when. userId is kept (set null) if the user is later deleted.
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  action    String
+  entity    String
+  entityId  Int?
+  details   String?
+  createdAt DateTime @default(now())
+
+  userId Int?
+  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
 }
 
 model Project {
@@ -46,10 +83,10 @@ model Project {
   endDate     DateTime?
   createdAt   DateTime      @default(now())
 
-  userId      Int
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  tasks       Task[]
+  tasks Task[]
 }
 
 model Task {
@@ -61,9 +98,9 @@ model Task {
   dueDate     DateTime?
   createdAt   DateTime     @default(now())
 
-  projectId   Int
-  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId Int
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  userId      Int
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

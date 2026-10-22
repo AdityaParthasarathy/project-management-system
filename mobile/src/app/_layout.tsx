@@ -4,6 +4,7 @@ import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { colors } from '@/constants/colors';
+import { OfflineBanner } from '@/components/OfflineBanner';
 
 export default function RootLayout() {
   return (
@@ -34,6 +35,7 @@ function AppNavigator() {
   return (
     <>
       <StatusBar style="light" />
+      <OfflineBanner />
       <Stack
         screenOptions={{
           headerShown: false,

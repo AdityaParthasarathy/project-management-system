@@ -8,6 +8,7 @@ import {
   View,
   Alert,
 } from 'react-native';
+import { validateLogin } from '@/shared/validation';
 import { Link } from 'expo-router';
 import { Button, Card, Input } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
@@ -23,8 +24,9 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     const trimmedEmail = email.trim();
-    if (!trimmedEmail || !password.trim()) {
-      setError('Please enter your email and password.');
+    const check = validateLogin({ email: trimmedEmail, password });
+    if (!check.ok) {
+      setError(check.message);
       return;
     }
 

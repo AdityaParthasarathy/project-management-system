@@ -31,6 +31,7 @@ async function bootstrap() {
   app.enableCors({
     origin: origins.includes('*') ? true : origins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    exposedHeaders: ['X-Total-Count'], // lets the web app read the pagination total
   });
 
   const port = Number(process.env.PORT) || 5000;

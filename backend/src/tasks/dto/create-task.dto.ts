@@ -1,23 +1,13 @@
 import {
   IsDateString,
-  IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
 } from 'class-validator';
-
-enum TaskPriority {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-}
-
-enum TaskStatus {
-  PENDING = 'PENDING',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-}
+import { TASK_PRIORITIES, TASK_STATUSES } from '../../shared/types.js';
+import type { TaskPriority, TaskStatus } from '../../shared/types.js';
 
 export class CreateTaskDto {
   @IsString()
@@ -28,11 +18,11 @@ export class CreateTaskDto {
   @IsOptional()
   description?: string;
 
-  @IsEnum(TaskPriority)
+  @IsIn(TASK_PRIORITIES)
   @IsOptional()
   priority?: TaskPriority;
 
-  @IsEnum(TaskStatus)
+  @IsIn(TASK_STATUSES)
   @IsOptional()
   status?: TaskStatus;
 

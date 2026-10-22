@@ -10,6 +10,7 @@ import { RateLimit } from '../common/rate-limit.js';
 import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { RefreshDto } from './dto/refresh.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 
 const authRateLimit = {
@@ -33,12 +34,17 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
-  // JWTs are stateless: logout is completed client-side by discarding the token.
+  // Trade a refresh token for a fresh access token (and a new, rotated refresh token).
+  @RateLimit({ limit: 60, ttlMs: 60_000 })
+  @Post('refresh')
+  refresh(@Body() dto: RefreshDto) {
+    return this.authService.refresh(dto.refreshToken);
+  }
+
+  // Revokes the refresh token on the server. Clients also delete their stored tokens.
   @Post('logout')
-  logout() {
-    return {
-      message: 'Logout successful',
-    };
+  logout(@Body() dto: RefreshDto) {
+    return this.authService.logout(dto.refreshToken);
   }
 
   @Get('me')

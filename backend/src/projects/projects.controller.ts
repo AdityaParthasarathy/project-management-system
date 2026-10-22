@@ -8,15 +8,16 @@ import {
   Post,
   Put,
   Query,
-  ParseEnumPipe,
   Request,
+  Res,
   UseGuards,
 } from '@nestjs/common';
-import { ProjectStatus } from '@prisma/client';
+import type { Response } from 'express';
 import { ProjectsService } from './projects.service.js';
 import { CreateProjectDto } from './dto/create-project.dto.js';
 import { UpdateProjectDto } from './dto/update-project.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { ProjectListQueryDto } from '../common/list-query.dto.js';
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
@@ -34,17 +35,16 @@ export class ProjectsController {
     );
   }
 
+  // Query: search, status, page, limit, sortBy, order. Total matches come back in the X-Total-Count header.
   @Get()
-  findAll(
+  async findAll(
     @Request() request: any,
-    @Query('search') search?: string,
-    @Query('status', new ParseEnumPipe(ProjectStatus, { optional: true })) status?: ProjectStatus,
+    @Query() query: ProjectListQueryDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.projectsService.findAll(
-      request.user.userId,
-      search,
-      status,
-    );
+    const { items, total } = await this.projectsService.findAll(request.user.userId, query);
+    res.setHeader('X-Total-Count', String(total));
+    return items;
   }
 
   @Get(':id')

@@ -15,6 +15,7 @@ import { colors } from '@/constants/colors';
 import { getDashboard } from '@/services/dashboard';
 import { getProjects } from '@/services/projects';
 import { getTasks } from '@/services/tasks';
+import { notifyTasksDueTomorrow } from '@/services/notifications';
 import { DashboardStats, Project, Task } from '@/types';
 
 function formatDate(value?: string | null) {
@@ -72,6 +73,7 @@ export default function HomeScreen() {
       setDashboard(stats);
       setProjects(projectList);
       setTasks(taskList);
+      void notifyTasksDueTomorrow(taskList);
     } catch (err: any) {
       if (err?.status === 401) {
         Alert.alert('Session expired', 'Your session has expired. Please log in again.');

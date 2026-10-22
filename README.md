@@ -15,6 +15,7 @@ Full-stack project & task manager: a **Next.js** web app and an **Expo / React N
 - Tasks: CRUD, priority (Low/Medium/High), status (Pending/In Progress/Completed), due date, mark complete, search + status/priority filters
 - Dashboard with live DB counts (projects, tasks, completed, pending, projects in progress)
 - Mobile: SecureStore token storage, session restore, 401 → session-expired + redirect to login, pull-to-refresh, loading / empty / error states
+- Bonus features: pagination, sorting, audit log (Activity page), roles (USER/ADMIN + admin page), refresh tokens with server-side logout, mobile offline cache, due-tomorrow reminders, shared types/validation. See [docs/BONUS_FEATURES.md](docs/BONUS_FEATURES.md)
 - Per-user data isolation on every endpoint, DTO validation, rate limiting
 
 ## Tech stack
@@ -57,7 +58,9 @@ cd ../mobile && npm install
 |---|---|---|
 | backend | `DATABASE_URL` | PostgreSQL connection string (secret) |
 | backend | `JWT_SECRET` | JWT signing key (secret, required — server refuses to start without it) |
-| backend | `JWT_EXPIRES_IN` | token lifetime, default `1d` |
+| backend | `JWT_EXPIRES_IN` | access-token lifetime, default `1h` |
+| backend | `REFRESH_TOKEN_DAYS` | refresh-token lifetime, default `7` |
+| backend | `ADMIN_EMAILS` | comma-separated emails that become ADMIN when they register |
 | backend | `PORT` | default `5000` |
 | backend | `CORS_ORIGIN` | comma-separated allowed web origins, `*` = any |
 | backend | `RATE_LIMIT_PER_MINUTE`, `AUTH_RATE_LIMIT_PER_MINUTE` | defaults 120 / 20 |

@@ -2,14 +2,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { TaskPriority, TaskStatus } from '@prisma/client';
+import { AuditService } from '../audit/audit.service.js';
+import { TaskListQueryDto, toPaging } from '../common/list-query.dto.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
 import { UpdateTaskDto } from './dto/update-task.dto.js';
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async create(userId: number, createTaskDto: CreateTaskDto) {
     const project = await this.prisma.project.findFirst({
@@ -23,7 +27,7 @@ export class TasksService {
       throw new NotFoundException('Project not found');
     }
 
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: {
         name: createTaskDto.name,
         description: createTaskDto.description,
@@ -36,47 +40,28 @@ export class TasksService {
         userId,
       },
     });
+    await this.audit.log({ userId, action: 'CREATE', entity: 'Task', entityId: task.id, details: task.name });
+    return task;
   }
 
-  async findAll(
-    userId: number,
-    search?: string,
-    status?: TaskStatus,
-    priority?: TaskPriority,
-    projectId?: number,
-  ) {
-    return this.prisma.task.findMany({
-      where: {
-        userId,
+  /** Returns the page of items plus the total number of matches (for pagination UIs). */
+  async findAll(userId: number, query: TaskListQueryDto = {}) {
+    const where = {
+      userId,
+      ...(query.projectId !== undefined ? { projectId: query.projectId } : {}),
+      ...(query.search
+        ? { name: { contains: query.search, mode: 'insensitive' as const } }
+        : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.priority ? { priority: query.priority } : {}),
+    };
 
-        ...(projectId !== undefined ? { projectId } : {}),
+    const [items, total] = await Promise.all([
+      this.prisma.task.findMany({ where, ...toPaging(query) }),
+      this.prisma.task.count({ where }),
+    ]);
 
-        ...(search
-          ? {
-              name: {
-                contains: search,
-                mode: 'insensitive',
-              },
-            }
-          : {}),
-
-        ...(status
-          ? {
-              status: status,
-            }
-          : {}),
-
-        ...(priority
-          ? {
-              priority: priority,
-            }
-          : {}),
-      },
-
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    return { items, total };
   }
 
   async findOne(userId: number, id: number) {
@@ -114,7 +99,7 @@ export class TasksService {
       }
     }
 
-    return this.prisma.task.update({
+    const task = await this.prisma.task.update({
       where: {
         id,
       },
@@ -129,16 +114,25 @@ export class TasksService {
           : undefined,
       },
     });
+    await this.audit.log({
+      userId,
+      action: updateTaskDto.status === 'COMPLETED' ? 'COMPLETE' : 'UPDATE',
+      entity: 'Task',
+      entityId: id,
+      details: task.name,
+    });
+    return task;
   }
 
   async remove(userId: number, id: number) {
-    await this.findOne(userId, id);
+    const existing = await this.findOne(userId, id);
 
     await this.prisma.task.delete({
       where: {
         id,
       },
     });
+    await this.audit.log({ userId, action: 'DELETE', entity: 'Task', entityId: id, details: existing.name });
 
     return {
       message: 'Task deleted successfully',

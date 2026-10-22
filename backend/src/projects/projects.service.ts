@@ -2,17 +2,21 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ProjectStatus } from '@prisma/client';
+import { AuditService } from '../audit/audit.service.js';
+import { ProjectListQueryDto, toPaging } from '../common/list-query.dto.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateProjectDto } from './dto/create-project.dto.js';
 import { UpdateProjectDto } from './dto/update-project.dto.js';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async create(userId: number, createProjectDto: CreateProjectDto) {
-    return this.prisma.project.create({
+    const project = await this.prisma.project.create({
       data: {
         name: createProjectDto.name,
         description: createProjectDto.description,
@@ -26,37 +30,26 @@ export class ProjectsService {
         userId,
       },
     });
+    await this.audit.log({ userId, action: 'CREATE', entity: 'Project', entityId: project.id, details: project.name });
+    return project;
   }
 
-  async findAll(
-    userId: number,
-    search?: string,
-    status?: ProjectStatus,
-  ) {
-    return this.prisma.project.findMany({
-      where: {
-        userId,
+  /** Returns the page of items plus the total number of matches (for pagination UIs). */
+  async findAll(userId: number, query: ProjectListQueryDto = {}) {
+    const where = {
+      userId,
+      ...(query.search
+        ? { name: { contains: query.search, mode: 'insensitive' as const } }
+        : {}),
+      ...(query.status ? { status: query.status } : {}),
+    };
 
-        ...(search
-          ? {
-              name: {
-                contains: search,
-                mode: 'insensitive',
-              },
-            }
-          : {}),
+    const [items, total] = await Promise.all([
+      this.prisma.project.findMany({ where, ...toPaging(query) }),
+      this.prisma.project.count({ where }),
+    ]);
 
-        ...(status
-          ? {
-              status: status,
-            }
-          : {}),
-      },
-
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    return { items, total };
   }
 
   async findOne(userId: number, id: number) {
@@ -81,7 +74,7 @@ export class ProjectsService {
   ) {
     await this.findOne(userId, id);
 
-    return this.prisma.project.update({
+    const project = await this.prisma.project.update({
       where: {
         id,
       },
@@ -95,16 +88,19 @@ export class ProjectsService {
           : undefined,
       },
     });
+    await this.audit.log({ userId, action: 'UPDATE', entity: 'Project', entityId: id, details: project.name });
+    return project;
   }
 
   async remove(userId: number, id: number) {
-    await this.findOne(userId, id);
+    const existing = await this.findOne(userId, id);
 
     await this.prisma.project.delete({
       where: {
         id,
       },
     });
+    await this.audit.log({ userId, action: 'DELETE', entity: 'Project', entityId: id, details: existing.name });
 
     return {
       message: 'Project deleted successfully',

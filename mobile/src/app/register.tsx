@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { validateRegister } from '@/shared/validation';
 import { Link } from 'expo-router';
 import { Button, Card, Input } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
@@ -23,13 +24,9 @@ export default function RegisterScreen() {
   const [error, setError] = useState('');
 
   const handleRegister = async () => {
-    if (!fullName.trim() || !email.trim() || !password.trim()) {
-      setError('Please complete all fields.');
-      return;
-    }
-
-    if (password.trim().length < 6) {
-      setError('Password must be at least 6 characters.');
+    const check = validateRegister({ fullName, email, password });
+    if (!check.ok) {
+      setError(check.message);
       return;
     }
 

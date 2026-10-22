@@ -2,7 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import { getMe, login as loginApi, logout as logoutApi, register as registerApi } from '@/services/auth';
-import { getToken, removeToken, saveToken } from '@/services/authStorage';
+import { getToken, removeToken, saveRefreshToken, saveToken } from '@/services/authStorage';
+import { clearCache } from '@/services/cache';
 import { User } from '@/types';
 
 interface AuthContextValue {
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const clearSession = useCallback(async () => {
     await removeToken();
+    await clearCache();
     setToken(null);
     setUser(null);
   }, []);
@@ -58,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const response = await loginApi(email, password);
     await saveToken(response.token);
+    await saveRefreshToken(response.refreshToken);
     setToken(response.token);
     const currentUser = await getMe();
     setUser(currentUser);
@@ -67,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (fullName: string, email: string, password: string) => {
     const response = await registerApi(fullName, email, password);
     await saveToken(response.token);
+    await saveRefreshToken(response.refreshToken);
     setToken(response.token);
     const currentUser = await getMe();
     setUser(currentUser);

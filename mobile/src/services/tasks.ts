@@ -1,4 +1,5 @@
-import { authenticatedRequest } from './api';
+import { authenticatedRequest, authenticatedRequestRaw } from './api';
+import { withCache } from './cache';
 import { Task } from '@/types';
 
 export interface TaskFilters {
@@ -6,6 +7,12 @@ export interface TaskFilters {
   status?: string;
   priority?: string;
   projectId?: number;
+}
+
+export interface TaskPageOptions extends TaskFilters {
+  limit?: number;
+  sortBy?: string;
+  order?: 'asc' | 'desc';
 }
 
 export async function getTasks(filters: TaskFilters = {}) {
@@ -19,7 +26,28 @@ export async function getTasks(filters: TaskFilters = {}) {
   const query = params.toString();
   const url = query ? `/tasks?${query}` : '/tasks';
 
-  return authenticatedRequest<Task[]>(url);
+  return withCache(`tasks:${query}`, () => authenticatedRequest<Task[]>(url));
+}
+
+/** One page of tasks (sorted) plus the total number of matches. Works offline from the saved copy. */
+export async function getTasksPage(options: TaskPageOptions = {}) {
+  const params = new URLSearchParams();
+
+  if (options.search) params.append('search', options.search);
+  if (options.status) params.append('status', options.status);
+  if (options.priority) params.append('priority', options.priority);
+  if (options.projectId) params.append('projectId', String(options.projectId));
+  params.append('page', '1');
+  params.append('limit', String(options.limit ?? 8));
+  if (options.sortBy) params.append('sortBy', options.sortBy);
+  if (options.order) params.append('order', options.order);
+
+  const query = params.toString();
+
+  return withCache(`tasks-page:${query}`, async () => {
+    const { data, headers } = await authenticatedRequestRaw<Task[]>(`/tasks?${query}`);
+    return { items: data, total: Number(headers.get('x-total-count') ?? data.length) };
+  });
 }
 
 export async function getTask(id: number) {

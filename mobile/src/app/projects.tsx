@@ -18,7 +18,8 @@ import { Button, Card, EmptyState, ErrorState, FilterChip, Input, LoadingState, 
 import { useAuth } from '@/context/AuthContext';
 import { colors } from '@/constants/colors';
 import { ApiError } from '@/services/api';
-import { createProject, deleteProject, getProjects, updateProject } from '@/services/projects';
+import { createProject, deleteProject, getProjectsPage, updateProject } from '@/services/projects';
+import { validateProject } from '@/shared/validation';
 import { Project } from '@/types';
 
 function formatDate(value?: string | null) {
@@ -35,12 +36,22 @@ const statusOptions = [
   { label: 'Completed', value: 'COMPLETED' },
 ] as const;
 
+const projectSortOptions = [
+  { label: 'Newest', value: 'createdAt:desc' },
+  { label: 'A-Z', value: 'name:asc' },
+  { label: 'Status', value: 'status:asc' },
+  { label: 'Start date', value: 'startDate:asc' },
+];
+
 export default function ProjectsScreen() {
   const { user, token, loading: authLoading, logout } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('createdAt:desc');
+  const [limit, setLimit] = useState(8);
+  const [total, setTotal] = useState(0);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'>('ALL');
   const [error, setError] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
@@ -65,8 +76,10 @@ export default function ProjectsScreen() {
         search: search.trim(),
         status: statusFilter === 'ALL' ? undefined : statusFilter,
       };
-      const data = await getProjects(filters);
-      setProjects(data);
+      const [sortBy, order] = sort.split(':');
+      const page = await getProjectsPage({ ...filters, limit, sortBy, order: order as 'asc' | 'desc' });
+      setProjects(page.items);
+      setTotal(page.total);
     } catch (err: any) {
       if (err?.status === 401) {
         await logout();
@@ -77,7 +90,7 @@ export default function ProjectsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [logout, search, statusFilter]);
+  }, [logout, search, statusFilter, sort, limit]);
 
   useFocusEffect(
     useCallback(() => {
@@ -124,8 +137,9 @@ export default function ProjectsScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) {
-      Alert.alert('Validation required', 'Project name is required.');
+    const check = validateProject({ name: form.name, startDate: form.startDate, endDate: form.endDate });
+    if (!check.ok) {
+      Alert.alert('Validation required', check.message);
       return;
     }
 
@@ -197,6 +211,12 @@ export default function ProjectsScreen() {
         />
       </View>
 
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterContent} style={styles.filtersRow}>
+        {projectSortOptions.map((option) => (
+          <FilterChip key={option.value} label={option.label} active={sort === option.value} onPress={() => setSort(option.value)} />
+        ))}
+      </ScrollView>
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersRow} contentContainerStyle={styles.filterContent}>
         {statusOptions.map((option) => (
           <FilterChip
@@ -219,6 +239,17 @@ export default function ProjectsScreen() {
           data={displayProjects}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.listContent}
+          ListFooterComponent={
+            projects.length < total ? (
+              <View style={{ paddingVertical: 12 }}>
+                <Button title={`Load more (${projects.length} of ${total})`} variant="secondary" onPress={() => setLimit((l) => l + 8)} />
+              </View>
+            ) : (
+              <Text style={{ color: colors.muted, textAlign: 'center', paddingVertical: 12 }}>
+                {total} {total === 1 ? 'project' : 'projects'}
+              </Text>
+            )
+          }
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadProjects(); }} tintColor={colors.primaryLight} />}
           renderItem={({ item }) => (
             <Card style={styles.projectCard}>
@@ -317,6 +348,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   filtersRow: {
+    flexGrow: 0,
+    flexShrink: 0,
     paddingHorizontal: 18,
     marginBottom: 10,
   },
